@@ -1,6 +1,6 @@
 // **********************************************************************
 //
-// Copyright (c) 2003-2016 ZeroC, Inc. All rights reserved.
+// Copyright (c) 2003-2017 ZeroC, Inc. All rights reserved.
 //
 // This copy of Ice is licensed to you under the terms described in the
 // ICE_LICENSE file included in this distribution.
@@ -1057,6 +1057,11 @@ void
 Activator::shutdown()
 {
     IceUtil::Monitor< IceUtil::Mutex>::Lock sync(*this);
+    if(_deactivating)
+    {
+        return;
+    }
+
     //
     // Deactivation has been initiated. Set _deactivating to true to
     // prevent activation of new processes. This will also cause the

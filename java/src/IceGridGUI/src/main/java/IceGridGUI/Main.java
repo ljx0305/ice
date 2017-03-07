@@ -1,6 +1,6 @@
 // **********************************************************************
 //
-// Copyright (c) 2003-2016 ZeroC, Inc. All rights reserved.
+// Copyright (c) 2003-2017 ZeroC, Inc. All rights reserved.
 //
 // This copy of Ice is licensed to you under the terms described in the
 // ICE_LICENSE file included in this distribution.
@@ -37,10 +37,13 @@ public class Main extends JFrame
             {
                 UIManager.setLookAndFeel("com.jgoodies.looks.windows.WindowsLookAndFeel");
             }
-            else  // JGoodies L&F
-            {
-                UIManager.setLookAndFeel("com.jgoodies.looks.plastic.PlasticLookAndFeel");
-            }
+            //
+            // Setting PlasticLookAndFeel trigger a crash when creating a JFileChooser.
+            //
+            //else  // JGoodies L&F
+            //{
+            //    UIManager.setLookAndFeel("com.jgoodies.looks.plastic.PlasticLookAndFeel");
+            //}
         }
         catch(Exception e)
         {
