@@ -1,14 +1,14 @@
 // **********************************************************************
 //
-// Copyright (c) 2003-2016 ZeroC, Inc. All rights reserved.
+// Copyright (c) 2003-2017 ZeroC, Inc. All rights reserved.
 //
 // This copy of Ice is licensed to you under the terms described in the
 // ICE_LICENSE file included in this distribution.
 //
 // **********************************************************************
 
-#ifndef ICE_SSL_SECURE_TRANSPORT_TRANSCEIVER_I_H
-#define ICE_SSL_SECURE_TRANSPORT_TRANSCEIVER_I_H
+#ifndef ICESSL_SECURE_TRANSPORT_TRANSCEIVER_I_H
+#define ICESSL_SECURE_TRANSPORT_TRANSCEIVER_I_H
 
 #include <IceSSL/Config.h>
 #include <IceSSL/InstanceF.h>
@@ -16,6 +16,7 @@
 #include <IceSSL/Plugin.h>
 
 #include <Ice/Transceiver.h>
+#include <Ice/UniqueRef.h>
 #include <Ice/Network.h>
 
 #ifdef ICE_USE_SECURE_TRANSPORT
@@ -67,12 +68,10 @@ private:
     const bool _incoming;
     const IceInternal::TransceiverPtr _delegate;
 
-    SSLContextRef _ssl;
-    SecTrustRef _trust;
+    IceInternal::UniqueRef<SSLContextRef> _ssl;
+    IceInternal::UniqueRef<SecTrustRef> _trust;
     bool _connected;
-    bool _verified;
 
-    size_t _buffered;
     enum SSLWantFlags
     {
         SSLWantRead = 0x1,
@@ -82,6 +81,11 @@ private:
     mutable Ice::Byte _flags;
     size_t _maxSendPacketSize;
     size_t _maxRecvPacketSize;
+    std::string _cipher;
+    std::vector<std::string> _certs;
+    bool _verified;
+    std::vector<CertificatePtr> _nativeCerts;
+    size_t _buffered;
 };
 typedef IceUtil::Handle<TransceiverI> TransceiverIPtr;
 

@@ -1,6 +1,6 @@
 // **********************************************************************
 //
-// Copyright (c) 2003-2016 ZeroC, Inc. All rights reserved.
+// Copyright (c) 2003-2017 ZeroC, Inc. All rights reserved.
 //
 // This copy of Ice is licensed to you under the terms described in the
 // ICE_LICENSE file included in this distribution.
@@ -11,7 +11,6 @@
 {
     var Ice = require("ice").Ice;
     var Test = require("Test").Test;
-    var Promise = Ice.Promise;
 
     var test = function(b)
     {
@@ -157,14 +156,14 @@
             {
                 var now = Date.now();
                 return Ice.Promise.delay(1000).then(() => {
-                    if(Data.now() - now > 1000)
+                    if(Date.now() - now > 1000)
                     {
                         test(false);
                     }
-                    return Promise.resolve();
+                    return Ice.Promise.resolve();
                 })
             }
-            return Promise.resolve();
+            return Ice.Promise.resolve();
         }
 
         runTestCase(adapter, proxy)
@@ -374,7 +373,7 @@
 
         runTestCase(adapter, proxy)
         {
-            var p = Promise.resolve();
+            var p = Ice.Promise.resolve();
 
             // Use this function so we don't have a function defined
             // inside of a loop
@@ -388,6 +387,37 @@
                 p = p.then(icePing(proxy)).delay(200);
             }
             return p.then(() => test(this._heartbeat >= 3));
+        }
+    }
+
+    class HeartbeatManualTest extends TestCase
+    {
+        constructor(com, out)
+        {
+            super("manual heartbeats", com, out);
+            //
+            // Disable heartbeats.
+            //
+            this.setClientACM(10, -1, 0);
+            this.setServerACM(10, -1, 0);
+        }
+
+        runTestCase(adapter, proxy)
+        {
+            function sendHeartbeats(con)
+            {
+                var p = Ice.Promise.resolve();
+                for(var i = 0; i < 5; ++i)
+                {
+                    p = p.then(con.heartbeat());
+                }
+                return p;
+            }
+
+            return proxy.startHeartbeatCount().then(
+                () => proxy.ice_getConnection()).then(
+                    con => sendHeartbeats(con)).then(
+                        () => proxy.waitForHeartbeatCount(5));
         }
     }
 
@@ -421,7 +451,7 @@
             test(acm.close === Ice.ACMClose.CloseOnInvocationAndIdle);
             test(acm.heartbeat === Ice.ACMHeartbeat.HeartbeatAlways);
 
-            return proxy.waitForHeartbeat(2);
+            return proxy.startHeartbeatCount().then(() => proxy.waitForHeartbeatCount(2));
         }
     }
 
@@ -459,6 +489,7 @@
 
             tests.push(new HeartbeatOnIdleTest(com, out));
             tests.push(new HeartbeatAlwaysTest(com, out));
+            tests.push(new HeartbeatManualTest(com, out));
             tests.push(new SetACMTest(com, out));
         }
 
@@ -478,7 +509,7 @@
     {
         id.properties.setProperty("Ice.Warn.Connections", "0");
         var c = Ice.initialize(id);
-        return Promise.try(() => allTests(out, c)).finally(() => c.destroy());
+        return Ice.Promise.try(() => allTests(out, c)).finally(() => c.destroy());
     };
     exports._test = run;
     exports._runServer = true;

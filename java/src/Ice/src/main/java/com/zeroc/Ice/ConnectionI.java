@@ -1,6 +1,6 @@
 // **********************************************************************
 //
-// Copyright (c) 2003-2016 ZeroC, Inc. All rights reserved.
+// Copyright (c) 2003-2017 ZeroC, Inc. All rights reserved.
 //
 // This copy of Ice is licensed to you under the terms described in the
 // ICE_LICENSE file included in this distribution.
@@ -165,25 +165,48 @@ public final class ConnectionI extends com.zeroc.IceInternal.EventHandler
     }
 
     @Override
-    synchronized public void close(boolean force)
+    public void close(final ConnectionClose mode)
     {
         if(Thread.interrupted())
         {
             throw new OperationInterruptedException();
         }
 
-        if(force)
+        if(_instance.queueRequests())
         {
-            setState(StateClosed, new ForcedCloseConnectionException());
+            _instance.getQueueExecutor().executeNoThrow(new Callable<Void>()
+            {
+                @Override
+                public Void call()
+                    throws Exception
+                {
+                    closeImpl(mode);
+                    return null;
+                }
+            });
         }
         else
         {
+            closeImpl(mode);
+        }
+    }
+
+    synchronized private void closeImpl(ConnectionClose mode)
+    {
+        if(mode == ConnectionClose.Forcefully)
+        {
+            setState(StateClosed, new ConnectionManuallyClosedException(false));
+        }
+        else if(mode == ConnectionClose.Gracefully)
+        {
+            setState(StateClosing, new ConnectionManuallyClosedException(true));
+        }
+        else
+        {
+            assert(mode == ConnectionClose.GracefullyWithWait);
+
             //
-            // If we do a graceful shutdown, then we wait until all
-            // outstanding requests have been completed. Otherwise,
-            // the CloseConnectionException will cause all outstanding
-            // requests to be retried, regardless of whether the
-            // server has processed them or not.
+            // Wait until all outstanding requests have been completed.
             //
             while(!_asyncRequests.isEmpty())
             {
@@ -197,7 +220,7 @@ public final class ConnectionI extends com.zeroc.IceInternal.EventHandler
                 }
             }
 
-            setState(StateClosing, new CloseConnectionException());
+            setState(StateClosing, new ConnectionManuallyClosedException(true));
         }
     }
 
@@ -289,14 +312,14 @@ public final class ConnectionI extends com.zeroc.IceInternal.EventHandler
         // We send a heartbeat if there was no activity in the last
         // (timeout / 4) period. Sending a heartbeat sooner than
         // really needed is safer to ensure that the receiver will
-        // receive in time the heartbeat. Sending the heartbeat if
+        // receive the heartbeat in time. Sending the heartbeat if
         // there was no activity in the last (timeout / 2) period
         // isn't enough since monitor() is called only every (timeout
         // / 2) period.
         //
         // Note that this doesn't imply that we are sending 4
         // heartbeats per timeout period because the monitor() method
-        // is sill only called every (timeout / 2) period.
+        // is still only called every (timeout / 2) period.
         //
         if(acm.heartbeat == ACMHeartbeat.HeartbeatAlways ||
            (acm.heartbeat != ACMHeartbeat.HeartbeatOff && _writeStream.isEmpty() &&
@@ -304,7 +327,7 @@ public final class ConnectionI extends com.zeroc.IceInternal.EventHandler
         {
             if(acm.heartbeat != ACMHeartbeat.HeartbeatOnInvocation || _dispatchCount > 0)
             {
-                heartbeat();
+                sendHeartbeatNow();
             }
         }
 
@@ -342,8 +365,7 @@ public final class ConnectionI extends com.zeroc.IceInternal.EventHandler
     }
 
     synchronized public int
-    sendAsyncRequest(OutgoingAsyncBase out, boolean compress, boolean response,
-                     int batchRequestNum)
+    sendAsyncRequest(OutgoingAsyncBase out, boolean compress, boolean response, int batchRequestNum)
             throws com.zeroc.IceInternal.RetryException
     {
         final OutputStream os = out.getOs();
@@ -429,17 +451,17 @@ public final class ConnectionI extends com.zeroc.IceInternal.EventHandler
     }
 
     @Override
-    public void flushBatchRequests()
+    public void flushBatchRequests(CompressBatch compressBatch)
     {
-        ObjectPrx.waitForResponseForCompletion(flushBatchRequestsAsync());
+        ObjectPrx.waitForResponseForCompletion(flushBatchRequestsAsync(compressBatch));
     }
 
     @Override
-    public java.util.concurrent.CompletableFuture<Void> flushBatchRequestsAsync()
+    public java.util.concurrent.CompletableFuture<Void> flushBatchRequestsAsync(CompressBatch compressBatch)
     {
         com.zeroc.IceInternal.ConnectionFlushBatch f =
             new com.zeroc.IceInternal.ConnectionFlushBatch(this, _communicator, _instance);
-        f.invoke();
+        f.invoke(compressBatch);
         return f;
     }
 
@@ -477,6 +499,107 @@ public final class ConnectionI extends com.zeroc.IceInternal.EventHandler
     synchronized public void setHeartbeatCallback(final HeartbeatCallback callback)
     {
         _heartbeatCallback = callback;
+    }
+
+    @Override
+    public void heartbeat()
+    {
+        ObjectPrx.waitForResponseForCompletion(heartbeatAsync());
+    }
+
+    private class HeartbeatAsync extends com.zeroc.IceInternal.OutgoingAsyncBaseI<Void>
+    {
+        public HeartbeatAsync(Communicator communicator, com.zeroc.IceInternal.Instance instance)
+        {
+            super(communicator, instance, "heartbeat");
+        }
+
+        @Override
+        public Connection getConnection()
+        {
+            return ConnectionI.this;
+        }
+
+        @Override
+        protected void markSent()
+        {
+            super.markSent();
+
+            assert((_state & StateOK) != 0);
+            complete(null);
+        }
+
+        @Override
+        protected void markCompleted()
+        {
+            if(_exception != null)
+            {
+                completeExceptionally(_exception);
+            }
+            super.markCompleted();
+        }
+
+        public void invoke()
+        {
+            try
+            {
+                _os.writeBlob(Protocol.magic);
+                ProtocolVersion.ice_write(_os, Protocol.currentProtocol);
+                EncodingVersion.ice_write(_os, Protocol.currentProtocolEncoding);
+                _os.writeByte(Protocol.validateConnectionMsg);
+                _os.writeByte((byte) 0);
+                _os.writeInt(Protocol.headerSize); // Message size.
+
+                int status;
+                if(_instance.queueRequests())
+                {
+                    status = _instance.getQueueExecutor().execute(new Callable<Integer>()
+                    {
+                        @Override
+                        public Integer call()
+                            throws com.zeroc.IceInternal.RetryException
+                        {
+                            return ConnectionI.this.sendAsyncRequest(HeartbeatAsync.this, false, false, 0);
+                        }
+                    });
+                }
+                else
+                {
+                    status = ConnectionI.this.sendAsyncRequest(this, false, false, 0);
+                }
+
+                if((status & AsyncStatus.Sent) > 0)
+                {
+                    _sentSynchronously = true;
+                    if((status & AsyncStatus.InvokeSentCallback) > 0)
+                    {
+                        invokeSent();
+                    }
+                }
+            }
+            catch(com.zeroc.IceInternal.RetryException ex)
+            {
+                if(completed(ex.get()))
+                {
+                    invokeCompletedAsync();
+                }
+            }
+            catch(com.zeroc.Ice.Exception ex)
+            {
+                if(completed(ex))
+                {
+                    invokeCompletedAsync();
+                }
+            }
+        }
+    }
+
+    @Override
+    public java.util.concurrent.CompletableFuture<Void> heartbeatAsync()
+    {
+        HeartbeatAsync __f = new HeartbeatAsync(_communicator, _instance);
+        __f.invoke();
+        return __f;
     }
 
     @Override
@@ -588,69 +711,135 @@ public final class ConnectionI extends com.zeroc.IceInternal.EventHandler
     }
 
     @Override
-    synchronized public void sendResponse(int requestId, OutputStream os, byte compressFlag, boolean amd)
+    public void sendResponse(int requestId, OutputStream os, byte compressFlag, boolean amd)
     {
-        assert (_state > StateNotValidated);
+        boolean queueResponse = false;
 
-        try
+        synchronized(this)
         {
-            if(--_dispatchCount == 0)
+            assert (_state > StateNotValidated);
+
+            try
             {
-                if(_state == StateFinished)
+                if(--_dispatchCount == 0)
                 {
-                    reap();
+                    if(_state == StateFinished)
+                    {
+                        reap();
+                    }
+                    notifyAll();
                 }
-                notifyAll();
+
+                if(_state >= StateClosed)
+                {
+                    assert (_exception != null);
+                    throw (LocalException) _exception.fillInStackTrace();
+                }
+
+                //
+                // We may be executing on the "main thread" (e.g., in Android together with a custom dispatcher)
+                // and therefore we have to defer network calls to a separate thread.
+                //
+                if(_instance.queueRequests())
+                {
+                    queueResponse = true;
+                }
+                else
+                {
+                    sendMessage(new OutgoingMessage(os, compressFlag != 0, true));
+
+                    if(_state == StateClosing && _dispatchCount == 0)
+                    {
+                        initiateShutdown();
+                    }
+                }
             }
-
-            if(_state >= StateClosed)
+            catch(LocalException ex)
             {
-                assert (_exception != null);
-                throw (LocalException) _exception.fillInStackTrace();
-            }
-
-            sendMessage(new OutgoingMessage(os, compressFlag != 0, true));
-
-            if(_state == StateClosing && _dispatchCount == 0)
-            {
-                initiateShutdown();
+                setState(StateClosed, ex);
             }
         }
-        catch(LocalException ex)
+
+        if(queueResponse)
         {
-            setState(StateClosed, ex);
+            _instance.getQueueExecutor().executeNoThrow(new Callable<Void>()
+            {
+                @Override
+                public Void call()
+                    throws Exception
+                {
+                    synchronized(ConnectionI.this)
+                    {
+                        try
+                        {
+                            sendMessage(new OutgoingMessage(os, compressFlag != 0, true));
+
+                            if(_state == StateClosing && _dispatchCount == 0)
+                            {
+                                initiateShutdown();
+                            }
+                        }
+                        catch(LocalException ex)
+                        {
+                            setState(StateClosed, ex);
+                        }
+                    }
+                    return null;
+                }
+            });
         }
     }
 
     @Override
-    synchronized public void sendNoResponse()
+    public void sendNoResponse()
     {
-        assert (_state > StateNotValidated);
-        try
+        boolean shutdown = false;
+
+        synchronized(this)
         {
-            if(--_dispatchCount == 0)
+            assert (_state > StateNotValidated);
+            try
             {
-                if(_state == StateFinished)
+                if(--_dispatchCount == 0)
                 {
-                    reap();
+                    if(_state == StateFinished)
+                    {
+                        reap();
+                    }
+                    notifyAll();
                 }
-                notifyAll();
-            }
 
-            if(_state >= StateClosed)
-            {
-                assert (_exception != null);
-                throw (LocalException) _exception.fillInStackTrace();
-            }
+                if(_state >= StateClosed)
+                {
+                    assert (_exception != null);
+                    throw (LocalException) _exception.fillInStackTrace();
+                }
 
-            if(_state == StateClosing && _dispatchCount == 0)
+                if(_state == StateClosing && _dispatchCount == 0)
+                {
+                    //
+                    // We may be executing on the "main thread" (e.g., in Android together with a custom dispatcher)
+                    // and therefore we have to defer network calls to a separate thread.
+                    //
+                    if(_instance.queueRequests())
+                    {
+                        shutdown = true;
+                    }
+                    else
+                    {
+                        initiateShutdown();
+                    }
+                }
+            }
+            catch(LocalException ex)
             {
-                initiateShutdown();
+                setState(StateClosed, ex);
             }
         }
-        catch(LocalException ex)
+
+        if(shutdown)
         {
-            setState(StateClosed, ex);
+            queueShutdown(false);
         }
     }
 
@@ -664,8 +853,7 @@ public final class ConnectionI extends com.zeroc.IceInternal.EventHandler
     public synchronized void invokeException(int requestId, LocalException ex, int invokeNum, boolean amd)
     {
         //
-        // Fatal exception while invoking a request. Since
-        // sendResponse/sendNoResponse isn't
+        // Fatal exception while invoking a request. Since sendResponse/sendNoResponse isn't
         // called in case of a fatal exception we decrement _dispatchCount here.
         //
 
@@ -931,7 +1119,7 @@ public final class ConnectionI extends com.zeroc.IceInternal.EventHandler
                 }
                 else
                 {
-                    assert (_state <= StateClosingPending);
+                    assert(_state <= StateClosingPending);
 
                     //
                     // We parse messages first, if we receive a close
@@ -1107,7 +1295,8 @@ public final class ConnectionI extends com.zeroc.IceInternal.EventHandler
             //
             if(info.invokeNum > 0)
             {
-                invokeAll(info.stream, info.invokeNum, info.requestId, info.compress, info.servantManager, info.adapter);
+                invokeAll(info.stream, info.invokeNum, info.requestId, info.compress, info.servantManager,
+                          info.adapter);
 
                 //
                 // Don't increase dispatchedCount, the dispatch count is
@@ -1121,7 +1310,7 @@ public final class ConnectionI extends com.zeroc.IceInternal.EventHandler
         //
         if(dispatchedCount > 0)
         {
-            boolean queueShutdown = false;
+            boolean shutdown = false;
 
             synchronized(this)
             {
@@ -1142,7 +1331,7 @@ public final class ConnectionI extends com.zeroc.IceInternal.EventHandler
                             // We can't call initiateShutdown() from this thread in certain
                             // situations (such as in Android).
                             //
-                            queueShutdown = true;
+                            shutdown = true;
                         }
                         else
                         {
@@ -1160,35 +1349,16 @@ public final class ConnectionI extends com.zeroc.IceInternal.EventHandler
                     {
                         reap();
                     }
-                    if(!queueShutdown)
+                    if(!shutdown)
                     {
                         notifyAll();
                     }
                 }
             }
 
-            if(queueShutdown)
+            if(shutdown)
             {
-                _instance.getQueueExecutor().executeNoThrow(new Callable<Void>()
-                {
-                    @Override
-                    public Void call() throws Exception
-                    {
-                        synchronized(ConnectionI.this)
-                        {
-                            try
-                            {
-                                initiateShutdown();
-                            }
-                            catch(LocalException ex)
-                            {
-                                setState(StateClosed, ex);
-                            }
-                            ConnectionI.this.notifyAll();
-                        }
-                        return null;
-                    }
-                });
+                queueShutdown(true);
             }
         }
     }
@@ -1264,7 +1434,7 @@ public final class ConnectionI extends com.zeroc.IceInternal.EventHandler
                 // Trace the cause of unexpected connection closures
                 //
                 if(!(_exception instanceof CloseConnectionException ||
-                     _exception instanceof ForcedCloseConnectionException ||
+                     _exception instanceof ConnectionManuallyClosedException ||
                      _exception instanceof ConnectionTimeoutException ||
                      _exception instanceof CommunicatorDestroyedException ||
                      _exception instanceof ObjectAdapterDeactivatedException))
@@ -1297,8 +1467,9 @@ public final class ConnectionI extends com.zeroc.IceInternal.EventHandler
         {
             if(_instance.queueRequests())
             {
-                // The connectStartFailed method might try to connect with another
-                // connector.
+                //
+                // The connectionStartFailed method might try to connect with another connector.
+                //
                 _instance.getQueueExecutor().executeNoThrow(new Callable<Void>()
                 {
                     @Override
@@ -1614,7 +1785,7 @@ public final class ConnectionI extends com.zeroc.IceInternal.EventHandler
                 // Don't warn about certain expected exceptions.
                 //
                 if(!(_exception instanceof CloseConnectionException ||
-                     _exception instanceof ForcedCloseConnectionException ||
+                     _exception instanceof ConnectionManuallyClosedException ||
                      _exception instanceof ConnectionTimeoutException ||
                      _exception instanceof CommunicatorDestroyedException ||
                      _exception instanceof ObjectAdapterDeactivatedException ||
@@ -1804,7 +1975,7 @@ public final class ConnectionI extends com.zeroc.IceInternal.EventHandler
             if(_observer != null && state == StateClosed && _exception != null)
             {
                 if(!(_exception instanceof CloseConnectionException ||
-                     _exception instanceof ForcedCloseConnectionException ||
+                     _exception instanceof ConnectionManuallyClosedException ||
                      _exception instanceof ConnectionTimeoutException ||
                      _exception instanceof CommunicatorDestroyedException ||
                      _exception instanceof ObjectAdapterDeactivatedException ||
@@ -1833,8 +2004,7 @@ public final class ConnectionI extends com.zeroc.IceInternal.EventHandler
 
     private void initiateShutdown()
     {
-        assert (_state == StateClosing);
-        assert (_dispatchCount == 0);
+        assert(_state == StateClosing && _dispatchCount == 0);
 
         if(_shutdownInitiated)
         {
@@ -1861,8 +2031,7 @@ public final class ConnectionI extends com.zeroc.IceInternal.EventHandler
                 setState(StateClosingPending);
 
                 //
-                // Notify the the transceiver of the graceful connection
-                // closure.
+                // Notify the transceiver of the graceful connection closure.
                 //
                 int op = _transceiver.closing(true, _exception);
                 if(op != 0)
@@ -1874,9 +2043,40 @@ public final class ConnectionI extends com.zeroc.IceInternal.EventHandler
         }
     }
 
-    private void heartbeat()
+    private void queueShutdown(boolean notify)
     {
-        assert (_state == StateActive);
+        //
+        // Must be called without synchronization!
+        //
+        _instance.getQueueExecutor().executeNoThrow(new Callable<Void>()
+        {
+            @Override
+            public Void call()
+                throws Exception
+            {
+                synchronized(ConnectionI.this)
+                {
+                    try
+                    {
+                        initiateShutdown();
+                    }
+                    catch(LocalException ex)
+                    {
+                        setState(StateClosed, ex);
+                    }
+                    if(notify)
+                    {
+                        ConnectionI.this.notifyAll();
+                    }
+                }
+                return null;
+            }
+        });
+    }
+
+    private void sendHeartbeatNow()
+    {
+        assert(_state == StateActive);
 
         if(!_endpoint.datagram())
         {
@@ -2071,8 +2271,7 @@ public final class ConnectionI extends com.zeroc.IceInternal.EventHandler
         }
         else if(_state == StateClosingPending && _writeStream.pos() == 0)
         {
-            // Message wasn't sent, empty the _writeStream, we're not going to
-            // send more data.
+            // Message wasn't sent, empty the _writeStream, we're not going to send more data.
             OutgoingMessage message = _sendStreams.getFirst();
             _writeStream.swap(message.stream);
             return SocketOperation.None;
@@ -2149,9 +2348,8 @@ public final class ConnectionI extends com.zeroc.IceInternal.EventHandler
             }
 
             //
-            // If all the messages were sent and we are in the closing state, we
-            // schedule the close timeout to wait for the peer to close the
-            // connection.
+            // If all the messages were sent and we are in the closing state, we schedule
+            // the close timeout to wait for the peer to close the connection.
             //
             if(_state == StateClosing && _shutdownInitiated)
             {
@@ -2376,8 +2574,7 @@ public final class ConnectionI extends com.zeroc.IceInternal.EventHandler
                         setState(StateClosingPending, new CloseConnectionException());
 
                         //
-                        // Notify the the transceiver of the graceful connection
-                        // closure.
+                        // Notify the transceiver of the graceful connection closure.
                         //
                         int op = _transceiver.closing(false, _exception);
                         if(op != 0)
@@ -2393,9 +2590,8 @@ public final class ConnectionI extends com.zeroc.IceInternal.EventHandler
                 {
                     if(_state >= StateClosing)
                     {
-                        TraceUtil.trace("received request during closing\n"
-                                                    + "(ignored by server, client will retry)", info.stream, _logger,
-                                                    _traceLevels);
+                        TraceUtil.trace("received request during closing\n(ignored by server, client will retry)",
+                                        info.stream, _logger, _traceLevels);
                     }
                     else
                     {
@@ -2413,9 +2609,8 @@ public final class ConnectionI extends com.zeroc.IceInternal.EventHandler
                 {
                     if(_state >= StateClosing)
                     {
-                        TraceUtil.trace("received batch request during closing\n"
-                                                    + "(ignored by server, client will retry)", info.stream, _logger,
-                                _traceLevels);
+                        TraceUtil.trace("received batch request during closing\n(ignored by server, client will retry)",
+                                        info.stream, _logger, _traceLevels);
                     }
                     else
                     {

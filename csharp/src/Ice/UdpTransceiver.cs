@@ -1,6 +1,6 @@
 // **********************************************************************
 //
-// Copyright (c) 2003-2016 ZeroC, Inc. All rights reserved.
+// Copyright (c) 2003-2017 ZeroC, Inc. All rights reserved.
 //
 // This copy of Ice is licensed to you under the terms described in the
 // ICE_LICENSE file included in this distribution.
@@ -586,10 +586,9 @@ namespace IceInternal
                         info.remotePort = Network.endpointPort(remoteEndpoint);
                     }
                 }
+                info.rcvSize = Network.getRecvBufferSize(_fd);
+                info.sndSize = Network.getSendBufferSize(_fd);
             }
-
-            info.rcvSize = Network.getRecvBufferSize(_fd);
-            info.sndSize = Network.getSendBufferSize(_fd);
 
             if(_mcastAddr != null)
             {
@@ -652,8 +651,17 @@ namespace IceInternal
         public string toDetailedString()
         {
             StringBuilder s = new StringBuilder(ToString());
-            List<string> intfs = Network.getHostsForEndpointExpand(
-                Network.endpointAddressToString(_addr), _instance.protocolSupport(), true);
+            List<string> intfs;
+            if(_mcastAddr == null)
+            {
+                intfs = Network.getHostsForEndpointExpand(Network.endpointAddressToString(_addr),
+                                                          _instance.protocolSupport(), true);
+            }
+            else
+            {
+                intfs = Network.getInterfacesForMulticast(_mcastInterface,
+                                                          Network.getProtocolSupport(_mcastAddr.Address));
+            }
             if(intfs.Count != 0)
             {
                 s.Append("\nlocal interfaces = ");

@@ -1,6 +1,6 @@
 // **********************************************************************
 //
-// Copyright (c) 2003-2016 ZeroC, Inc. All rights reserved.
+// Copyright (c) 2003-2017 ZeroC, Inc. All rights reserved.
 //
 // This copy of Ice is licensed to you under the terms described in the
 // ICE_LICENSE file included in this distribution.
@@ -11,14 +11,13 @@
 {
     var Ice = require("ice").Ice;
     var Test = require("Test").Test;
-    var Promise = Ice.Promise;
 
     var allTests = function(out, communicator)
     {
         var failCB = function() { test(false); };
         var ref, obj, mult, timeout, to, connection, comm, now;
 
-        var p = new Promise();
+        var p = new Ice.Promise();
         var test = function(b)
         {
             if(!b)
@@ -36,7 +35,7 @@
         };
 
         var seq;
-        Promise.try(() =>
+        Ice.Promise.try(() =>
             {
                 ref = "timeout:default -p 12010";
                 obj = communicator.stringToProxy(ref);
@@ -142,7 +141,7 @@
                 connection = con;
                 return timeout.holdAdapter(1500);
             }
-        ).then(() => connection.close(false)
+        ).then(() => connection.close(Ice.ConnectionClose.GracefullyWithWait)
         ).then(() =>
             {
                 try
@@ -163,7 +162,7 @@
                 }
                 catch(ex)
                 {
-                    test(ex instanceof Ice.CloseConnectionException); // Expected
+                    test(ex instanceof Ice.ConnectionManuallyClosedException); // Expected
                 }
                 return timeout.op();
             }
@@ -318,7 +317,7 @@
         id.properties.setProperty("Ice.MessageSizeMax", "10000");
 
         var c = Ice.initialize(id);
-        return Promise.try(() =>
+        return Ice.Promise.try(() =>
             {
                 if(typeof(navigator) !== 'undefined' && isSafari() && isWorker())
                 {

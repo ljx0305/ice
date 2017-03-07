@@ -1,6 +1,6 @@
 // **********************************************************************
 //
-// Copyright (c) 2003-2016 ZeroC, Inc. All rights reserved.
+// Copyright (c) 2003-2017 ZeroC, Inc. All rights reserved.
 //
 // This copy of Ice is licensed to you under the terms described in the
 // ICE_LICENSE file included in this distribution.
@@ -11,7 +11,6 @@
 {
     var Ice = require("ice").Ice;
     var Test = require("Test").Test;
-    var Promise = Ice.Promise;
 
     function allTests(communicator, out)
     {
@@ -59,7 +58,7 @@
         var b1 = null;
         var b2 = null;
 
-        Promise.try(() =>
+        Ice.Promise.try(() =>
             {
                 out.write("testing batch requests with proxy... ");
                 return p.opBatchCount().then(count =>
@@ -111,7 +110,7 @@
                         //
                         test(batchCount === 0);
                         b1.opBatch();
-                        b1.ice_getCachedConnection().close(false);
+                        b1.ice_getCachedConnection().close(Ice.ConnectionClose.GracefullyWithWait);
                         return communicator.flushBatchRequests().then(() => p.opBatchCount());
                     }
                 ).then(batchCount =>
@@ -156,7 +155,7 @@
                                 b2 = prx;
                                 b1.opBatch();
                                 b2.opBatch();
-                                b1.ice_getCachedConnection().close(false);
+                                b1.ice_getCachedConnection().close(Ice.ConnectionClose.GracefullyWithWait);
                                 return communicator.flushBatchRequests();
                             }
                         ).then(() => p.waitForBatch(1)
@@ -181,8 +180,8 @@
                                 b2 = prx;
                                 b1.opBatch();
                                 b2.opBatch();
-                                b1.ice_getCachedConnection().close(false);
-                                b2.ice_getCachedConnection().close(false);
+                                b1.ice_getCachedConnection().close(Ice.ConnectionClose.GracefullyWithWait);
+                                b2.ice_getCachedConnection().close(Ice.ConnectionClose.GracefullyWithWait);
                                 return communicator.flushBatchRequests();
                             }
                         ).then(() => p.opBatchCount());
@@ -340,7 +339,7 @@
     exports._test = function(out, id)
     {
         var communicator = Ice.initialize(id);
-        return Promise.try(() =>
+        return Ice.Promise.try(() =>
             {
                 if(typeof(navigator) !== 'undefined' && isSafari() && isWorker())
                 {

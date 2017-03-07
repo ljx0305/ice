@@ -1,6 +1,6 @@
 // **********************************************************************
 //
-// Copyright (c) 2003-2016 ZeroC, Inc. All rights reserved.
+// Copyright (c) 2003-2017 ZeroC, Inc. All rights reserved.
 //
 // This copy of Ice is licensed to you under the terms described in the
 // ICE_LICENSE file included in this distribution.
@@ -990,16 +990,7 @@ class ServiceManagerI : ServiceManagerDisp_
             }
 
             removeAdminFacets("IceBox.Service." + service + ".");
-
-            try
-            {
-                communicator.destroy();
-            }
-            catch(Exception e)
-            {
-                _logger.warning("ServiceManager: exception while destroying communicator for service "
-                                + service + "\n" + e.ToString());
-            }
+            communicator.destroy();
         }
     }
 

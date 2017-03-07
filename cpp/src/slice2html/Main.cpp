@@ -1,6 +1,6 @@
 // **********************************************************************
 //
-// Copyright (c) 2003-2016 ZeroC, Inc. All rights reserved.
+// Copyright (c) 2003-2017 ZeroC, Inc. All rights reserved.
 //
 // This copy of Ice is licensed to you under the terms described in the
 // ICE_LICENSE file included in this distribution.
@@ -11,6 +11,7 @@
 #include <IceUtil/CtrlCHandler.h>
 #include <IceUtil/Mutex.h>
 #include <IceUtil/MutexPtrLock.h>
+#include <IceUtil/ConsoleUtil.h>
 #include <Slice/Preprocessor.h>
 #include <Slice/FileTracker.h>
 #include <Slice/Util.h>
@@ -19,7 +20,7 @@
 
 using namespace std;
 using namespace Slice;
-using namespace IceUtil;
+using namespace IceUtilInternal;
 
 namespace
 {
@@ -58,18 +59,18 @@ interruptedCallback(int /*signal*/)
 void
 usage(const string& n)
 {
-    getErrorStream() << "Usage: " << n << " [options] slice-files...\n";
-    getErrorStream() <<
+    consoleErr << "Usage: " << n << " [options] slice-files...\n";
+    consoleErr <<
         "Options:\n"
         "-h, --help           Show this message.\n"
         "-v, --version        Display the Ice version.\n"
-        "--validate           Validate command line options.\n"
         "-DNAME               Define NAME as 1.\n"
         "-DNAME=DEF           Define NAME as DEF.\n"
         "-UNAME               Remove any definition for NAME.\n"
         "-IDIR                Put DIR in the include file search path.\n"
         "-E                   Print preprocessor output on stdout.\n"
         "--output-dir DIR     Create files in the directory DIR.\n"
+        "-d, --debug          Print debug messages.\n"
         "--hdr FILE           Use the contents of FILE as the header.\n"
         "--ftr FILe           Use the contents of FILE as the footer.\n"
         "--indexhdr FILE      Use the contents of FILE as the header of the index/toc page (default=--hdr).\n"
@@ -79,7 +80,6 @@ usage(const string& n)
         "--search ACTION      Generate search box with specified ACTION.\n"
         "--index NUM          Generate subindex if it has at least NUM entries (0 for no index, default=1).\n"
         "--summary NUM        Print a warning if a summary sentence exceeds NUM characters.\n"
-        "-d, --debug          Print debug messages.\n"
         "--ice                Allow reserved Ice prefix in Slice identifiers\n"
         "                     deprecated: use instead [[\"ice-prefix\"]] metadata.\n"
         "--underscore         Allow underscores in Slice identifiers\n"
@@ -120,7 +120,7 @@ compile(const vector<string>& argv)
     }
     catch(const IceUtilInternal::BadOptException& e)
     {
-        getErrorStream() << argv[0] << ": error: " << e.reason << endl;
+        consoleErr << argv[0] << ": error: " << e.reason << endl;
         if(!validate)
         {
             usage(argv[0]);
@@ -136,7 +136,7 @@ compile(const vector<string>& argv)
 
     if(opts.isSet("version"))
     {
-        getErrorStream() << ICE_STRING_VERSION << endl;
+        consoleErr << ICE_STRING_VERSION << endl;
         return EXIT_SUCCESS;
     }
 
@@ -179,8 +179,8 @@ compile(const vector<string>& argv)
         s >>  indexCount;
         if(!s)
         {
-            getErrorStream() << argv[0] << ": error: the --index operation requires a positive integer argument"
-                             << endl;
+            consoleErr << argv[0] << ": error: the --index operation requires a positive integer argument"
+                       << endl;
             if(!validate)
             {
                 usage(argv[0]);
@@ -203,8 +203,8 @@ compile(const vector<string>& argv)
         s >>  summaryCount;
         if(!s)
         {
-            getErrorStream() << argv[0] << ": error: the --summary operation requires a positive integer argument"
-                             << endl;
+            consoleErr << argv[0] << ": error: the --summary operation requires a positive integer argument"
+                       << endl;
             if(!validate)
             {
                 usage(argv[0]);
@@ -221,7 +221,7 @@ compile(const vector<string>& argv)
 
     if(args.empty())
     {
-        getErrorStream() << argv[0] << ": error: no input file" << endl;
+        consoleErr << argv[0] << ": error: no input file" << endl;
         if(!validate)
         {
             usage(argv[0]);
@@ -254,7 +254,7 @@ compile(const vector<string>& argv)
         if(preprocess)
         {
             char buf[4096];
-            while(fgets(buf, static_cast<int>(sizeof(buf)), cppHandle) != NULL)
+            while(fgets(buf, static_cast<int>(sizeof(buf)), cppHandle) != ICE_NULLPTR)
             {
                 if(fputs(buf, stdout) == EOF)
                 {
@@ -297,19 +297,19 @@ compile(const vector<string>& argv)
             // created files.
             FileTracker::instance()->cleanup();
             p->destroy();
-            getErrorStream() << argv[0] << ": error: " << ex.reason() << endl;
+            consoleErr << argv[0] << ": error: " << ex.reason() << endl;
             return EXIT_FAILURE;
         }
         catch(const string& err)
         {
             FileTracker::instance()->cleanup();
-            getErrorStream() << argv[0] << ": error: " << err << endl;
+            consoleErr << argv[0] << ": error: " << err << endl;
             status = EXIT_FAILURE;
         }
         catch(const char* err)
         {
             FileTracker::instance()->cleanup();
-            getErrorStream() << argv[0] << ": error: " << err << endl;
+            consoleErr << argv[0] << ": error: " << err << endl;
             status = EXIT_FAILURE;
         }
     }
@@ -342,22 +342,22 @@ int main(int argc, char* argv[])
     }
     catch(const std::exception& ex)
     {
-        getErrorStream() << args[0] << ": error:" << ex.what() << endl;
+        consoleErr << args[0] << ": error:" << ex.what() << endl;
         return EXIT_FAILURE;
     }
     catch(const std::string& msg)
     {
-        getErrorStream() << args[0] << ": error:" << msg << endl;
+        consoleErr << args[0] << ": error:" << msg << endl;
         return EXIT_FAILURE;
     }
     catch(const char* msg)
     {
-        getErrorStream() << args[0] << ": error:" << msg << endl;
+        consoleErr << args[0] << ": error:" << msg << endl;
         return EXIT_FAILURE;
     }
     catch(...)
     {
-        getErrorStream() << args[0] << ": error:" << "unknown exception" << endl;
+        consoleErr << args[0] << ": error:" << "unknown exception" << endl;
         return EXIT_FAILURE;
     }
 }

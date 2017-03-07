@@ -1,6 +1,6 @@
 # **********************************************************************
 #
-# Copyright (c) 2003-2016 ZeroC, Inc. All rights reserved.
+# Copyright (c) 2003-2017 ZeroC, Inc. All rights reserved.
 #
 # This copy of Ice is licensed to you under the terms described in the
 # ICE_LICENSE file included in this distribution.
@@ -20,7 +20,7 @@ class Glacier2Router(ProcessFromBinDir, Server):
 
     def setup(self, current):
         if self.passwords:
-            path = os.path.join(current.testcase.getPath(), "passwords")
+            path = os.path.join(current.testsuite.getPath(), "passwords")
             with open(path, "w") as file:
                 command = "\"%s\" %s" % (sys.executable,
                                      os.path.abspath(os.path.join(toplevel, "scripts", "icehashpassword.py")))
@@ -43,7 +43,7 @@ class Glacier2Router(ProcessFromBinDir, Server):
                     if(p.wait() != 0):
                         raise RuntimeError("icehashpassword.py failed:\n" + p.stdout.read().decode('UTF-8').strip())
                     file.write("%s %s\n" % (user, p.stdout.readline().decode('UTF-8').strip()))
-            current.testcase.files.append(path)
+            current.files.append(path)
 
     def getProps(self, current):
         props = Server.getProps(self, current)
@@ -54,7 +54,7 @@ class Glacier2Router(ProcessFromBinDir, Server):
             "Ice.Admin.InstanceName" : "Glacier2",
         })
         if self.passwords:
-            props["Glacier2.CryptPasswords"] = os.path.join("{testdir}", "passwords")
+            props["Glacier2.CryptPasswords"] = os.path.join(current.testsuite.getPath(), "passwords")
         if isinstance(current.testcase.getTestSuite(), Glacier2TestSuite):
             # Add the properties provided by the Glacier2TestSuite routerProps parameter.
             props.update(current.testcase.getTestSuite().getRouterProps(self, current))

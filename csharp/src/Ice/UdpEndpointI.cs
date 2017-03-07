@@ -1,6 +1,6 @@
 // **********************************************************************
 //
-// Copyright (c) 2003-2016 ZeroC, Inc. All rights reserved.
+// Copyright (c) 2003-2017 ZeroC, Inc. All rights reserved.
 //
 // This copy of Ice is licensed to you under the terms described in the
 // ICE_LICENSE file included in this distribution.
@@ -156,6 +156,24 @@ namespace IceInternal
         public override Acceptor acceptor(string adapterName)
         {
             return null;
+        }
+
+        public override void initWithOptions(List<string> args, bool oaEndpoint)
+        {
+            base.initWithOptions(args, oaEndpoint);
+
+            if(_mcastInterface.Equals("*"))
+            {
+                if(oaEndpoint)
+                {
+                    _mcastInterface = "";
+                }
+                else
+                {
+                    throw new Ice.EndpointParseException("`--interface *' not valid for proxy endpoint `" +
+                                                         ToString() + "'");
+                }
+            }
         }
 
         public UdpEndpointI endpoint(UdpTransceiver transceiver)

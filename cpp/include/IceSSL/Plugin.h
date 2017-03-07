@@ -1,16 +1,17 @@
 // **********************************************************************
 //
-// Copyright (c) 2003-2016 ZeroC, Inc. All rights reserved.
+// Copyright (c) 2003-2017 ZeroC, Inc. All rights reserved.
 //
 // This copy of Ice is licensed to you under the terms described in the
 // ICE_LICENSE file included in this distribution.
 //
 // **********************************************************************
 
-#ifndef ICE_SSL_PLUGIN_H
-#define ICE_SSL_PLUGIN_H
+#ifndef ICESSL_PLUGIN_H
+#define ICESSL_PLUGIN_H
 
 #include <Ice/Plugin.h>
+#include <Ice/UniqueRef.h>
 #include <IceSSL/Config.h>
 #include <IceSSL/ConnectionInfo.h>
 
@@ -59,6 +60,7 @@
 typedef struct ssl_ctx_st SSL_CTX;
 typedef struct X509_name_st X509NAME;
 
+typedef struct X509_extension_st* X509ExtensionRef;
 typedef struct x509_st* X509CertificateRef;
 typedef struct evp_pkey_st* KeyRef;
 
@@ -69,6 +71,7 @@ typedef SecKeyRef KeyRef;
 
 #elif defined(ICE_USE_SCHANNEL)
 
+typedef CERT_EXTENSION X509ExtensionRef;
 typedef CERT_SIGNED_CONTENT_INFO* X509CertificateRef;
 typedef CERT_PUBLIC_KEY_INFO* KeyRef;
 
@@ -172,8 +175,9 @@ public:
 
     PublicKey(const CertificatePtr&, KeyRef);
 
+#ifdef ICE_USE_OPENSSL
     ~PublicKey();
-
+#endif
     //
     // Retrieve the native public key value wrapped by this object.
     //
@@ -188,7 +192,11 @@ private:
     friend class Certificate;
 
     CertificatePtr _cert;
+#ifdef __APPLE__
+    IceInternal::UniqueRef<KeyRef> _key;
+#else
     KeyRef _key;
+#endif
 
 };
 ICE_DEFINE_PTR(PublicKeyPtr, PublicKey);
@@ -288,11 +296,49 @@ operator!=(const DistinguishedName& lhs, const DistinguishedName& rhs)
     return !(lhs == rhs);
 }
 
+#if defined(ICE_USE_OPENSSL) || defined(ICE_USE_SCHANNEL)
+//
+// This class is a wrapper around a native certificate extension.
+//
+// X509 extension wrapper is only implemented with OpenSSL and SChannel
+// other engines lacks the required APIs to implement this feature.
+//
+class ICESSL_API X509Extension
+#ifndef ICE_CPP11_MAPPING
+    : public virtual IceUtil::Shared
+#endif
+{
+public:
+
+    //
+    // Construct a X509 extension using a native extension.
+    //
+    X509Extension(X509ExtensionRef, const std::string&, const CertificatePtr&);
+    ~X509Extension();
+
+    bool isCritical() const;
+    std::string getOID() const;
+    std::vector<Ice::Byte> getData() const;
+
+private:
+
+    X509ExtensionRef _extension;
+    std::string _oid;
+    //
+    // We want to keep the certificate that contains the extension alive
+    // for the lifetime of the extension.
+    //
+    CertificatePtr _cert;
+};
+ICE_DEFINE_PTR(X509ExtensionPtr, X509Extension);
+#endif
+
 //
 // This convenience class is a wrapper around a native certificate.
 // The interface is inspired by java.security.cert.X509Certificate.
 //
 class ICESSL_API Certificate :
+        public IceUtil::Mutex,
 #ifdef ICE_CPP11_MAPPING
         public std::enable_shared_from_this<Certificate>
 #else
@@ -330,6 +376,16 @@ public:
     //
     bool operator==(const Certificate&) const;
     bool operator!=(const Certificate&) const;
+    
+    //
+    // Authority key identifier
+    //
+    std::vector<Ice::Byte> getAuthorityKeyIdentifier() const;
+
+    //
+    // Subject key identifier
+    //
+    std::vector<Ice::Byte> getSubjectKeyIdentifier() const;
 
     //
     // Get the certificate's public key.
@@ -483,19 +539,47 @@ public:
     //
     X509CertificateRef getCert() const;
 
-private:
+#if defined(ICE_USE_OPENSSL) || defined(ICE_USE_SCHANNEL)
+    //
+    // Return a list with the X509v3 extensions contained in the 
+    // certificate.
+    //
+    std::vector<X509ExtensionPtr> getX509Extensions() const;
+    
+    //
+    // Return the extension with the given OID or null if the certificate
+    // does not contain a extension with the given OID.
+    //
+    X509ExtensionPtr getX509Extension(const std::string&) const;
+#endif
 
+private:
+    
+    //
+    // Lazzy initialization of the extensions
+    //
+    void loadX509Extensions() const;
+
+#if defined(__APPLE__)
+    IceInternal::UniqueRef<X509CertificateRef> _cert;
+#else
     X509CertificateRef _cert;
+#endif
 
 #ifdef ICE_USE_SCHANNEL
     CERT_INFO* _certInfo;
 #endif
+
 #if defined(__APPLE__) && TARGET_OS_IPHONE != 0
     void initializeAttributes() const;
-    mutable CFDataRef _subject;
-    mutable CFDataRef _issuer;
+    mutable IceInternal::UniqueRef<CFDataRef> _subject;
+    mutable IceInternal::UniqueRef<CFDataRef> _issuer;
     mutable std::string _serial;
     mutable int _version;
+#endif
+
+#if defined(ICE_USE_OPENSSL) || defined(ICE_USE_SCHANNEL)
+    mutable std::vector<X509ExtensionPtr> _extensions;
 #endif
 };
 

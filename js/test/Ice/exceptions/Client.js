@@ -1,6 +1,6 @@
 // **********************************************************************
 //
-// Copyright (c) 2003-2016 ZeroC, Inc. All rights reserved.
+// Copyright (c) 2003-2017 ZeroC, Inc. All rights reserved.
 //
 // This copy of Ice is licensed to you under the terms described in the
 // ICE_LICENSE file included in this distribution.
@@ -11,8 +11,6 @@
 {
     var Ice = require("ice").Ice;
     var Test = require("Test").Test;
-
-    var Promise = Ice.Promise;
 
     var allTests = function(out, communicator, Test, bidir)
     {
@@ -62,7 +60,7 @@
 
         var supportsUndeclaredExceptions = function(thrower)
         {
-            return Promise.try(
+            return Ice.Promise.try(
                 function()
                 {
                     return thrower.supportsUndeclaredExceptions().then(
@@ -100,7 +98,7 @@
 
         var supportsAssertException = function(thrower)
         {
-            return Promise.try(
+            return Ice.Promise.try(
                 function()
                 {
                     return thrower.supportsAssertException().then(
@@ -124,7 +122,7 @@
         };
 
         var base, ref, thrower;
-        Promise.try(
+        Ice.Promise.try(
             function()
             {
                 out.write("testing object adapter registration exceptions... ");
@@ -465,7 +463,7 @@
         id.properties.setProperty("Ice.MessageSizeMax", "10");
         id.properties.setProperty("Ice.Warn.Connections", "0");
         var c = Ice.initialize(id);
-        return Promise.try(
+        return Ice.Promise.try(
             function()
             {
                 return allTests(out, c, Test);

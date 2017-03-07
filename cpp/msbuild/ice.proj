@@ -9,10 +9,14 @@
     <Platform>Win32</Platform>
   </PropertyGroup>
 
-
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
 
+  <PropertyGroup Condition="'$(DefaultPlatformToolset)' == 'v140' OR '$(DefaultPlatformToolset)' == 'v141'">
+    <Cpp11Compiler>yes</Cpp11Compiler>
+  </PropertyGroup>
+
   <Import Project="$(MSBuildThisFileDirectory)\..\..\config\Ice.common.targets" />
+
 
   <!--
       Restore Nuget packages.
@@ -21,11 +25,11 @@
     <Exec Command="$(NugetExe) restore $(MSBuildThisFileDirectory)ice.$(DefaultPlatformToolset).sln"/>
   </Target>
 
-  <Target Name="TestNugetRestore" DependsOnTargets="GetNuget" Condition="'$(UseBinDist)' == 'yes'">
+  <Target Name="TestNugetRestore" DependsOnTargets="GetNuget" Condition="'$(ICE_BIN_DIST)' == 'all'">
     <Exec Command="$(NugetExe) restore $(MSBuildThisFileDirectory)ice.test.sln"/>
   </Target>
 
-  <Target Name="UWPTestNugetRestore" DependsOnTargets="GetNuget" Condition="'$(UseBinDist)' == 'yes'">
+  <Target Name="UWPTestNugetRestore" DependsOnTargets="GetNuget" Condition="'$(ICE_BIN_DIST)' == 'all'">
     <Exec Command="$(NugetExe) restore $(MSBuildThisFileDirectory)ice.testuwp.sln"/>
   </Target>
 
@@ -94,8 +98,8 @@
         </TestSolution>
       </ItemGroup>
 
-      <!-- Ice for C++ test configurations (C++11 mapping) requires v140 -->
-      <ItemGroup Condition="'$(DefaultPlatformToolset)' == 'v140'">
+      <!-- Ice for C++ test configurations (C++11 mapping) requires a C++11 compiler -->
+      <ItemGroup Condition="'$(Cpp11Compiler)' == 'yes'">
         <TestSolution Include="ice.test.sln">
           <Properties>Configuration=Cpp11-Debug;Platform=Win32</Properties>
         </TestSolution>
@@ -110,8 +114,8 @@
         </TestSolution>
       </ItemGroup>
 
-      <!-- Ice for UWP test configurations (C++11 mapping) requires v140 -->
-      <ItemGroup Condition="'$(DefaultPlatformToolset)' == 'v140'">
+      <!-- Ice for UWP test configurations (C++11 mapping) requires a C++11 compiler -->
+      <ItemGroup Condition="'$(Cpp11Compiler)' == 'yes'">
         <UWPTestSolution Include="ice.testuwp.sln">
           <Properties>Configuration=Debug;Platform=Win32</Properties>
         </UWPTestSolution>
@@ -145,13 +149,13 @@
       </ItemGroup>
 
       <!-- Ice for C++ test configurations (C++11 mapping) requires v140 -->
-      <ItemGroup Condition="'$(DefaultPlatformToolset)' == 'v140' and '$(Platform)' != 'ARM'">
+      <ItemGroup Condition="'$(Cpp11Compiler)' == 'yes' and '$(Platform)' != 'ARM'">
         <TestSolution Include="ice.test.sln">
           <Properties>Configuration=Cpp11-$(Configuration);Platform=$(Platform)</Properties>
         </TestSolution>
       </ItemGroup>
 
-      <ItemGroup Condition="'$(DefaultPlatformToolset)' == 'v140'">
+      <ItemGroup Condition="'$(Cpp11Compiler)' == 'yes'">
         <UWPDistSolution Include="ice.uwp.sln">
           <Properties>Configuration=$(Configuration);Platform=$(Platform)</Properties>
         </UWPDistSolution>
@@ -162,7 +166,7 @@
       </ItemGroup>
             
       <!-- Ice for ARM builds require the Win32 Slice compiler -->
-      <ItemGroup Condition="'$(DefaultPlatformToolset)' == 'v140' and '$(Platform)' == 'ARM'">
+      <ItemGroup Condition="'$(Cpp11Compiler)' == 'yes' and '$(Platform)' == 'ARM'">
         <DistSolution Include="ice.$(DefaultPlatformToolset).sln">
           <Properties>Configuration=$(Configuration);Platform=Win32</Properties>
         </DistSolution>
@@ -172,7 +176,7 @@
 
   <!-- Build distribution targets -->
   <Target Name="BuildDist" DependsOnTargets="NugetRestore"
-          Condition="'$(UseBinDist)' != 'yes'">
+          Condition="'$(ICE_BIN_DIST)' != 'all'">
     <MSBuild Projects="@(DistSolution)"
              BuildInParallel="true"
              Properties="%(Properties)"/>
@@ -180,7 +184,7 @@
 
   <!-- Clean distribution targets -->
   <Target Name="CleanDist"
-          Condition="'$(UseBinDist)' != 'yes'">
+          Condition="'$(ICE_BIN_DIST)' != 'all'">
     <MSBuild Projects="@(DistSolution)"
              BuildInParallel="true"
              Properties="%(Properties)"
@@ -228,7 +232,7 @@
 
   <!-- Build UWP distribution targetes -->
   <Target Name="UWPBuildDist" DependsOnTargets="NugetRestore"
-          Condition="'$(UseBinDist)' != 'yes'">
+          Condition="'$(ICE_BIN_DIST)' != 'all'">
     <!-- UWP dist soultions require the slice2cpp translator from dist solutions -->
     <MSBuild Projects="@(DistSolution)"
              BuildInParallel="true"
@@ -242,7 +246,7 @@
 
   <!-- Clean UWP distribution targets -->
   <Target Name="UWPCleanDist"
-          Condition="'$(UseBinDist)' != 'yes'">
+          Condition="'$(ICE_BIN_DIST)' != 'all'">
     <MSBuild Projects="@(UWPDistSolution)"
              BuildInParallel="true"
              Properties="%(Properties)"

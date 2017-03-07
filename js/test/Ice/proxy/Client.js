@@ -1,6 +1,6 @@
 // **********************************************************************
 //
-// Copyright (c) 2003-2016 ZeroC, Inc. All rights reserved.
+// Copyright (c) 2003-2017 ZeroC, Inc. All rights reserved.
 //
 // This copy of Ice is licensed to you under the terms described in the
 // ICE_LICENSE file included in this distribution.
@@ -12,7 +12,6 @@
     var Ice = require("ice").Ice;
     var IceSSL = require("ice").IceSSL;
     var Test = require("Test").Test;
-    var Promise = Ice.Promise;
 
     function allTests(communicator, out)
     {
@@ -37,7 +36,7 @@
 
         var defaultProtocol = communicator.getProperties().getPropertyWithDefault("Ice.Default.Protocol", "tcp");
 
-        return Promise.try(() =>
+        return Ice.Promise.try(() =>
             {
                 out.write("testing stringToProxy... ");
                 ref = "test:default -p 12010";
@@ -698,8 +697,9 @@
                 test(compObj.ice_connectionId("id1").ice_getConnectionId() === "id1");
                 test(compObj.ice_connectionId("id2").ice_getConnectionId() === "id2");
 
-                test(compObj.ice_compress(true).equals(compObj.ice_compress(true)));
-                test(!compObj.ice_compress(false).equals(compObj.ice_compress(true)));
+                // Proxy doesn't support ice_compress
+                //test(compObj.ice_compress(true).equals(compObj.ice_compress(true)));
+                //test(!compObj.ice_compress(false).equals(compObj.ice_compress(true)));
 
                 test(compObj.ice_timeout(20).equals(compObj.ice_timeout(20)));
                 test(!compObj.ice_timeout(10).equals(compObj.ice_timeout(20)));
@@ -1106,15 +1106,39 @@
         ).then(() =>
             {
                 out.writeLine("ok");
-                var derived = Test.MyDerivedClassPrx.uncheckedCast(communicator.stringToProxy("test:default -p 12010"));
-                return derived.shutdown();
-            });
+
+                out.write("testing proxyToString... ");
+                b1 = communicator.stringToProxy(ref);
+                b2 = communicator.stringToProxy(communicator.proxyToString(b1));
+                test(b1.equals(b2));
+
+                return b1.ice_getConnection();
+            }
+        ).then(con =>
+               {
+                   b2 = con.createProxy(Ice.stringToIdentity("fixed"));
+                   str = communicator.proxyToString(b2);
+                   test(b2.toString() === str);
+                   str2 = b1.ice_identity(b2.ice_getIdentity()).ice_secure(b2.ice_isSecure()).toString();
+
+                   // Verify that the stringified fixed proxy is the same as a regular stringified proxy
+                   // but without endpoints
+                   test(str2.startsWith(str));
+                   test(str2.charAt(str.length) === ':');
+
+                   out.writeLine("ok");
+               }
+        ).then(() =>
+               {
+                    var derived = Test.MyDerivedClassPrx.uncheckedCast(communicator.stringToProxy("test:default -p 12010"));
+                    return derived.shutdown();
+               });
     }
 
     var run = function(out, id)
     {
         var communicator = Ice.initialize(id);
-        return Promise.try(() => allTests(communicator, out)).finally(() => communicator.destroy());
+        return Ice.Promise.try(() => allTests(communicator, out)).finally(() => communicator.destroy());
     };
     exports._test = run;
     exports._runServer = true;

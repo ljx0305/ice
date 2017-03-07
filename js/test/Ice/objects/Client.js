@@ -1,6 +1,6 @@
 // **********************************************************************
 //
-// Copyright (c) 2003-2016 ZeroC, Inc. All rights reserved.
+// Copyright (c) 2003-2017 ZeroC, Inc. All rights reserved.
 //
 // This copy of Ice is licensed to you under the terms described in the
 // ICE_LICENSE file included in this distribution.
@@ -11,8 +11,6 @@
 {
     var Ice = require("ice").Ice;
     var Test = require("Test").Test;
-
-    var Promise = Ice.Promise;
 
     class BI extends Test.B
     {
@@ -129,7 +127,7 @@
         return null;
     }
 
-    class MyObjectFactory extends Ice.ObjectFactory
+    class MyObjectFactory
     {
 
         create(type)
@@ -163,7 +161,7 @@
             }
         };
 
-        Promise.try(
+        Ice.Promise.try(
             function()
             {
                 communicator.getValueFactoryManager().add(MyValueFactory, "::Test::B");
@@ -465,7 +463,7 @@
     var run = function(out, id)
     {
         var c = Ice.initialize(id);
-        return Promise.try(() => allTests(out, c)).finally(() => c.destroy());
+        return Ice.Promise.try(() => allTests(out, c)).finally(() => c.destroy());
     };
     exports._test = run;
     exports._runServer = true;

@@ -1,14 +1,14 @@
 // **********************************************************************
 //
-// Copyright (c) 2003-2016 ZeroC, Inc. All rights reserved.
+// Copyright (c) 2003-2017 ZeroC, Inc. All rights reserved.
 //
 // This copy of Ice is licensed to you under the terms described in the
 // ICE_LICENSE file included in this distribution.
 //
 // **********************************************************************
 
-#ifndef ICE_SSL_UWP_TRANSCEIVER_I_H
-#define ICE_SSL_UWP_TRANSCEIVER_I_H
+#ifndef ICESSL_UWP_TRANSCEIVER_I_H
+#define ICESSL_UWP_TRANSCEIVER_I_H
 
 #include <IceSSL/Config.h>
 
@@ -67,7 +67,9 @@ private:
 
     bool _connected;
     bool _upgraded;
+    std::vector<std::string> _certs;
     bool _verified;
+    std::vector<CertificatePtr> _nativeCerts;
     Windows::Security::Cryptography::Certificates::CertificateChain^ _chain;
 };
 typedef IceUtil::Handle<TransceiverI> TransceiverIPtr;

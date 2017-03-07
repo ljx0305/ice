@@ -1,6 +1,6 @@
 // **********************************************************************
 //
-// Copyright (c) 2003-2016 ZeroC, Inc. All rights reserved.
+// Copyright (c) 2003-2017 ZeroC, Inc. All rights reserved.
 //
 // This copy of Ice is licensed to you under the terms described in the
 // ICE_LICENSE file included in this distribution.
@@ -20,6 +20,7 @@
 #include <Ice/LoggerUtil.h>
 #include <Ice/Buffer.h>
 #include <Ice/LocalException.h>
+#include <Ice/Network.h>
 
 #ifdef ICE_USE_OPENSSL
 
@@ -97,9 +98,6 @@ IceSSL::TransceiverI::initialize(IceInternal::Buffer& readBuffer, IceInternal::B
 
     if(!_ssl)
     {
-        //
-        // This static_cast is necessary due to 64bit windows. There SOCKET is a non-int type.
-        //
         SOCKET fd = _delegate->getNativeInfo()->fd();
         if(fd == INVALID_SOCKET)
         {
@@ -154,6 +152,25 @@ IceSSL::TransceiverI::initialize(IceInternal::Buffer& readBuffer, IceInternal::B
                     assert(false);
                 }
             }
+
+            //
+            // Hostname verification was included in OpenSSL 1.0.2
+            //
+#if defined(OPENSSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x10002000L
+            if(_engine->getCheckCertName() && !_host.empty() && (sslVerifyMode & SSL_VERIFY_PEER))
+            {
+                X509_VERIFY_PARAM* param = SSL_get0_param(_ssl);
+                if(IceInternal::isIpAddress(_host))
+                {
+                    X509_VERIFY_PARAM_set1_ip_asc(param, _host.c_str());
+                }
+                else
+                {
+                    X509_VERIFY_PARAM_set1_host(param, _host.c_str(), 0);
+                }
+            }
+#endif
+            
             SSL_set_verify(_ssl, sslVerifyMode, IceSSL_opensslVerifyCallback);
         }
     }
@@ -279,6 +296,8 @@ IceSSL::TransceiverI::initialize(IceInternal::Buffer& readBuffer, IceInternal::B
     {
         _verified = true;
     }
+
+    _cipher = SSL_get_cipher_name(_ssl); // Nothing needs to be free'd.
     _engine->verifyPeer(_host, ICE_DYNAMIC_CAST(NativeConnectionInfo, getInfo()), toString());
 
     if(_engine->securityTraceLevel() >= 1)
@@ -567,16 +586,10 @@ IceSSL::TransceiverI::getInfo() const
     info->underlying = _delegate->getInfo();
     info->incoming = _incoming;
     info->adapterName = _adapterName;
+    info->cipher = _cipher;
+    info->certs = _certs;
     info->verified = _verified;
     info->nativeCerts = _nativeCerts;
-    for(vector<CertificatePtr>::const_iterator p = _nativeCerts.begin(); p != _nativeCerts.end(); ++p)
-    {
-        info->certs.push_back((*p)->encode());
-    }
-    if(_ssl != 0)
-    {
-        info->cipher = SSL_get_cipher_name(_ssl); // Nothing needs to be free'd.
-    }
     return info;
 }
 
@@ -620,9 +633,12 @@ IceSSL::TransceiverI::verifyCallback(int ok, X509_STORE_CTX* c)
     if(chain != 0)
     {
         _nativeCerts.clear();
+        _certs.clear();
         for(int i = 0; i < sk_X509_num(chain); ++i)
         {
-            _nativeCerts.push_back(ICE_MAKE_SHARED(Certificate, X509_dup(sk_X509_value(chain, i))));
+            CertificatePtr cert = ICE_MAKE_SHARED(Certificate, X509_dup(sk_X509_value(chain, i)));
+            _nativeCerts.push_back(cert);
+            _certs.push_back(cert->encode());
         }
         sk_X509_pop_free(chain, X509_free);
     }

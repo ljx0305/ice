@@ -1,14 +1,14 @@
 // **********************************************************************
 //
-// Copyright (c) 2003-2016 ZeroC, Inc. All rights reserved.
+// Copyright (c) 2003-2017 ZeroC, Inc. All rights reserved.
 //
 // This copy of Ice is licensed to you under the terms described in the
 // ICE_LICENSE file included in this distribution.
 //
 // **********************************************************************
 
-#ifndef ICE_SSL_SCHANNELTRANSCEIVER_I_H
-#define ICE_SSL_SCHANNELTRANSCEIVER_I_H
+#ifndef ICESSL_SCHANNELTRANSCEIVER_I_H
+#define ICESSL_SCHANNELTRANSCEIVER_I_H
 
 #include <IceSSL/Config.h>
 #include <IceSSL/InstanceF.h>
@@ -121,7 +121,10 @@ private:
     CredHandle _credentials;
     bool _credentialsInitialized;
     SecPkgContext_StreamSizes _sizes;
+    std::string _cipher;
+    std::vector<std::string> _certs;
     bool _verified;
+    std::vector<CertificatePtr> _nativeCerts;
 };
 typedef IceUtil::Handle<TransceiverI> TransceiverIPtr;
 

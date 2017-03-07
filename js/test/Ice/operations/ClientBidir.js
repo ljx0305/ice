@@ -1,6 +1,6 @@
 // **********************************************************************
 //
-// Copyright (c) 2003-2016 ZeroC, Inc. All rights reserved.
+// Copyright (c) 2003-2017 ZeroC, Inc. All rights reserved.
 //
 // This copy of Ice is licensed to you under the terms described in the
 // ICE_LICENSE file included in this distribution.
@@ -14,8 +14,6 @@
     var MyDerivedClassI = require("MyDerivedClassI").MyDerivedClassI;
     var AMDMyDerivedClassI = require("AMDMyDerivedClassI").AMDMyDerivedClassI;
     var Client = require("Client.js");
-
-    var Promise = Ice.Promise;
 
     var allTests = function(out, communicator, amd)
     {
@@ -42,7 +40,7 @@
     {
         id.properties.setProperty("Ice.BatchAutoFlushSize", "100");
         var communicator = Ice.initialize(id);
-        return Promise.try(() =>
+        return Ice.Promise.try(() =>
             {
                 out.writeLine("testing bidir callbacks with synchronous dispatch...");
                 return allTests(out, communicator, false);

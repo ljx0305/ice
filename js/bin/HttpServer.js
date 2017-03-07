@@ -1,6 +1,6 @@
 // **********************************************************************
 //
-// Copyright (c) 2003-2016 ZeroC, Inc. All rights reserved.
+// Copyright (c) 2003-2017 ZeroC, Inc. All rights reserved.
 //
 // This copy of Ice is licensed to you under the terms described in the
 // ICE_LICENSE file included in this distribution.
@@ -189,6 +189,10 @@ function Init()
                     {
                         return "/test/" + matchController[1] + "/" + f;
                     }
+                    else if(f.indexOf("/lib") === 0 && es5)
+                    {
+                        return f.replace("/lib", "/lib/es5");
+                    }
                     else
                     {
                         return f;
@@ -235,7 +239,9 @@ function Init()
             // If OPTIMIZE is set resolve Ice libraries to the corresponding minified
             // versions.
             //
-            if(process.env.OPTIMIZE == "yes")
+            // NOTE: only used minified versions with ES5 for now, they aren't supported with ES6 yet.
+            //
+            if(process.env.OPTIMIZE == "yes" && filePath.indexOf("es5/") !== -1)
             {
                 if(iceLib && filePath.substr(-7) !== ".min.js")
                 {

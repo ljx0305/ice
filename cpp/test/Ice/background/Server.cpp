@@ -1,6 +1,6 @@
 // **********************************************************************
 //
-// Copyright (c) 2003-2016 ZeroC, Inc. All rights reserved.
+// Copyright (c) 2003-2017 ZeroC, Inc. All rights reserved.
 //
 // This copy of Ice is licensed to you under the terms described in the
 // ICE_LICENSE file included in this distribution.
@@ -83,8 +83,9 @@ class RouterI : public Ice::Router
 public:
 
     virtual Ice::ObjectPrxPtr
-    getClientProxy(const Ice::Current& current) const
+    getClientProxy(IceUtil::Optional<bool>& hasRoutingTable, const Ice::Current& current) const
     {
+        hasRoutingTable = true;
         _controller->checkCallPause(current);
         return ICE_NULLPTR;
     }

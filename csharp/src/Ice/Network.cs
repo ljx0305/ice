@@ -1,6 +1,6 @@
 // **********************************************************************
 //
-// Copyright (c) 2003-2016 ZeroC, Inc. All rights reserved.
+// Copyright (c) 2003-2017 ZeroC, Inc. All rights reserved.
 //
 // This copy of Ice is licensed to you under the terms described in the
 // ICE_LICENSE file included in this distribution.
@@ -435,19 +435,6 @@ namespace IceInternal
             try
             {
                 int ifaceIndex = getInterfaceIndex(iface, family);
-                if(ifaceIndex == -1)
-                {
-                    try
-                    {
-                        ifaceIndex = int.Parse(iface, CultureInfo.InvariantCulture);
-                    }
-                    catch(FormatException ex)
-                    {
-                        closeSocketNoThrow(socket);
-                        throw new Ice.SocketException(ex);
-                    }
-                }
-
                 if(family == AddressFamily.InterNetwork)
                 {
                     ifaceIndex = IPAddress.HostToNetworkOrder(ifaceIndex);
@@ -469,33 +456,40 @@ namespace IceInternal
         {
             try
             {
-                int index = getInterfaceIndex(iface, group.AddressFamily);
-                if(group.AddressFamily == AddressFamily.InterNetwork)
+                var indexes = new HashSet<int>();
+                foreach(string intf in getInterfacesForMulticast(iface, getProtocolSupport(group)))
                 {
-                    MulticastOption option;
-                    if(index == -1)
+                    int index = getInterfaceIndex(intf, group.AddressFamily);
+                    if(!indexes.Contains(index))
                     {
-                        option = new MulticastOption(group);
+                        indexes.Add(index);
+                        if(group.AddressFamily == AddressFamily.InterNetwork)
+                        {
+                            MulticastOption option;
+                            if(index == -1)
+                            {
+                                option = new MulticastOption(group);
+                            }
+                            else
+                            {
+                                option = new MulticastOption(group, index);
+                            }
+                            s.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.AddMembership, option);
+                        }
+                        else
+                        {
+                            IPv6MulticastOption option;
+                            if(index == -1)
+                            {
+                                option = new IPv6MulticastOption(group);
+                            }
+                            else
+                            {
+                                option = new IPv6MulticastOption(group, index);
+                            }
+                            s.SetSocketOption(SocketOptionLevel.IPv6, SocketOptionName.AddMembership, option);
+                        }
                     }
-
-                    else
-                    {
-                        option = new MulticastOption(group, index);
-                    }
-                    s.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.AddMembership, option);
-                }
-                else
-                {
-                    IPv6MulticastOption option;
-                    if(index == -1)
-                    {
-                        option = new IPv6MulticastOption(group);
-                    }
-                    else
-                    {
-                        option = new IPv6MulticastOption(group, index);
-                    }
-                    s.SetSocketOption(SocketOptionLevel.IPv6, SocketOptionName.AddMembership, option);
                 }
             }
             catch(Exception ex)
@@ -693,6 +687,11 @@ namespace IceInternal
             setBlock(fd, fd.Blocking);
         }
 
+        public static int getProtocolSupport(IPAddress addr)
+        {
+            return addr.AddressFamily == AddressFamily.InterNetwork ? EnableIPv4 : EnableIPv6;
+        }
+
         public static EndPoint getAddressForServer(string host, int port, int protocol, bool preferIPv6)
         {
             if(host.Length == 0)
@@ -841,18 +840,6 @@ namespace IceInternal
                         }
                     }
                 }
-
-                foreach(IPAddress a in Dns.GetHostAddresses(Dns.GetHostName()))
-                {
-                    if((a.AddressFamily == AddressFamily.InterNetwork && protocol != EnableIPv6) ||
-                       (a.AddressFamily == AddressFamily.InterNetworkV6 && protocol != EnableIPv4))
-                    {
-                        if(includeLoopback || !IPAddress.IsLoopback(a))
-                        {
-                            addresses.Add(a);
-                        }
-                    }
-                }
             }
             catch(SocketException ex)
             {
@@ -953,23 +940,9 @@ namespace IceInternal
 
         public static List<string> getHostsForEndpointExpand(string host, int protocol, bool includeLoopback)
         {
-            bool wildcard = host.Length == 0;
-            bool ipv4Wildcard = false;
-            if(!wildcard)
-            {
-                try
-                {
-                    IPAddress addr = IPAddress.Parse(host);
-                    ipv4Wildcard = addr.Equals(IPAddress.Any);
-                    wildcard = ipv4Wildcard || addr.Equals(IPAddress.IPv6Any);
-                }
-                catch(Exception)
-                {
-                }
-            }
-
             List<string> hosts = new List<string>();
-            if(wildcard)
+            bool ipv4Wildcard = false;
+            if(isWildcard(host, out ipv4Wildcard))
             {
                 IPAddress[] addrs = getLocalAddresses(ipv4Wildcard ? EnableIPv4 : protocol, includeLoopback);
                 foreach(IPAddress a in addrs)
@@ -981,6 +954,25 @@ namespace IceInternal
                 }
             }
             return hosts;
+        }
+
+        public static List<string> getInterfacesForMulticast(string intf, int protocol)
+        {
+            List<string> interfaces = new List<string>();
+            bool ipv4Wildcard = false;
+            if(isWildcard(intf, out ipv4Wildcard))
+            {
+                IPAddress[] addrs = getLocalAddresses(ipv4Wildcard ? EnableIPv4 : protocol, true);
+                foreach(IPAddress a in addrs)
+                {
+                    interfaces.Add(a.ToString());
+                }
+            }
+            if(interfaces.Count == 0)
+            {
+                interfaces.Add(intf);
+            }
+            return interfaces;
         }
 
         public static string fdToString(Socket socket, NetworkProxy proxy, EndPoint target)
@@ -1178,7 +1170,8 @@ namespace IceInternal
                     }
                 }
             }
-            return -1;
+
+            throw new ArgumentException("couldn't find interface `" + iface + "'");
         }
 
         public static EndPoint
@@ -1187,7 +1180,7 @@ namespace IceInternal
             EndPoint addr = null;
             if(!string.IsNullOrEmpty(sourceAddress))
             {
-                List<EndPoint> addrs = getAddresses(sourceAddress, 0, EnableBoth, Ice.EndpointSelectionType.Ordered, 
+                List<EndPoint> addrs = getAddresses(sourceAddress, 0, EnableBoth, Ice.EndpointSelectionType.Ordered,
                                                     false, false);
                 if(addrs.Count != 0)
                 {
@@ -1195,6 +1188,32 @@ namespace IceInternal
                 }
             }
             return addr;
+        }
+
+        private static bool
+        isWildcard(string address, out bool ipv4Wildcard)
+        {
+            ipv4Wildcard = false;
+            if(address.Length == 0)
+            {
+                return true;
+            }
+
+            try
+            {
+                IPAddress addr = IPAddress.Parse(address);
+                if(addr.Equals(IPAddress.Any))
+                {
+                    ipv4Wildcard = true;
+                    return true;
+                }
+                return addr.Equals(IPAddress.IPv6Any);
+            }
+            catch(Exception)
+            {
+            }
+
+            return false;
         }
 
         public static bool

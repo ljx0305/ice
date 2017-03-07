@@ -1,6 +1,6 @@
 // **********************************************************************
 //
-// Copyright (c) 2003-2016 ZeroC, Inc. All rights reserved.
+// Copyright (c) 2003-2017 ZeroC, Inc. All rights reserved.
 //
 // This copy of Ice is licensed to you under the terms described in the
 // ICE_LICENSE file included in this distribution.
@@ -554,6 +554,19 @@ namespace Ice
             }
         }
 
+        public Endpoint[] getEndpoints()
+        {
+            lock(this)
+            {
+                List<Endpoint> endpoints = new List<Endpoint>();
+                foreach(IncomingConnectionFactory factory in _incomingConnectionFactories)
+                {
+                    endpoints.Add(factory.endpoint());
+                }
+                return endpoints.ToArray();
+            }
+        }
+
         public void refreshPublishedEndpoints()
         {
             LocatorInfo locatorInfo = null;
@@ -588,24 +601,52 @@ namespace Ice
             }
         }
 
-        public Endpoint[] getEndpoints()
-        {
-            lock(this)
-            {
-                List<Endpoint> endpoints = new List<Endpoint>();
-                foreach(IncomingConnectionFactory factory in _incomingConnectionFactories)
-                {
-                    endpoints.Add(factory.endpoint());
-                }
-                return endpoints.ToArray();
-            }
-        }
-
         public Endpoint[] getPublishedEndpoints()
         {
             lock(this)
             {
                 return _publishedEndpoints.ToArray();
+            }
+        }
+
+        public void setPublishedEndpoints(Endpoint[] newEndpoints)
+        {
+            List<EndpointI> newPublishedEndpoints = new List<EndpointI>(newEndpoints.Length);
+
+            foreach(Endpoint e in newEndpoints)
+            {
+                newPublishedEndpoints.Add((EndpointI)e);
+            }
+
+            LocatorInfo locatorInfo = null;
+            List<EndpointI> oldPublishedEndpoints;
+
+            lock(this)
+            {
+                checkForDeactivation();
+
+                oldPublishedEndpoints = _publishedEndpoints;
+                _publishedEndpoints = newPublishedEndpoints;
+
+                locatorInfo = _locatorInfo;
+            }
+
+            try
+            {
+                Identity dummy = new Identity();
+                dummy.name = "dummy";
+                updateLocatorRegistry(locatorInfo, createDirectProxy(dummy));
+            }
+            catch(LocalException)
+            {
+                lock(this)
+                {
+                    //
+                    // Restore the old published endpoints.
+                    //
+                    _publishedEndpoints = oldPublishedEndpoints;
+                    throw;
+                }
             }
         }
 
@@ -688,7 +729,7 @@ namespace Ice
             }
         }
 
-        public void flushAsyncBatchRequests(CommunicatorFlushBatchAsync outAsync)
+        public void flushAsyncBatchRequests(Ice.CompressBatch compressBatch, CommunicatorFlushBatchAsync outAsync)
         {
             List<IncomingConnectionFactory> f;
             lock(this)
@@ -698,7 +739,7 @@ namespace Ice
 
             foreach(IncomingConnectionFactory factory in f)
             {
-                factory.flushAsyncBatchRequests(outAsync);
+                factory.flushAsyncBatchRequests(compressBatch, outAsync);
             }
         }
 
@@ -1118,6 +1159,10 @@ namespace Ice
                 beg = IceUtilInternal.StringUtil.findFirstNotOf(endpts, delim, end);
                 if(beg == -1)
                 {
+                    if(endpoints.Count != 0)
+                    {
+                        throw new EndpointParseException("invalid empty object adapter endpoint");
+                    }
                     break;
                 }
 
@@ -1166,17 +1211,14 @@ namespace Ice
 
                 if(end == beg)
                 {
-                    ++end;
-                    continue;
+                    throw new EndpointParseException("invalid empty object adapter endpoint");
                 }
 
                 string s = endpts.Substring(beg, (end) - (beg));
                 EndpointI endp = _instance.endpointFactoryManager().create(s, oaEndpoints);
                 if(endp == null)
                 {
-                    EndpointParseException e2 = new EndpointParseException();
-                    e2.str = "invalid object adapter endpoint `" + s + "'";
-                    throw e2;
+                    throw new EndpointParseException("invalid object adapter endpoint `" + s + "'");
                 }
                 endpoints.Add(endp);
 

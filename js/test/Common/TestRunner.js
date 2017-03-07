@@ -1,6 +1,6 @@
 // **********************************************************************
 //
-// Copyright (c) 2003-2016 ZeroC, Inc. All rights reserved.
+// Copyright (c) 2003-2017 ZeroC, Inc. All rights reserved.
 //
 // This copy of Ice is licensed to you under the terms described in the
 // ICE_LICENSE file included in this distribution.
@@ -139,6 +139,7 @@ function runTest(testsuite, language, host, protocol, testcases, out)
                     return;
                 }
 
+                var runTestCase;
                 if(typeof(_testBidir) !== "undefined" && client == _testBidir)
                 {
                     out.writeLine("[ running bidir " + testcase.name + " test]");
@@ -167,7 +168,7 @@ function runTest(testsuite, language, host, protocol, testcases, out)
                         if(testcase.args !== undefined)
                         {
                             initData.properties = Ice.createProperties(testcase.args, id.properties);
-                            process.argv=testcase.args
+                            process.argv = testcase.args;
                         }
                         return client(out, initData);
                     }
@@ -189,8 +190,7 @@ function runTest(testsuite, language, host, protocol, testcases, out)
                         {
                             return serverTestCase.destroy();
                         }
-                    }
-                );
+                    });
             }
 
             var p = Ice.Promise.resolve();
