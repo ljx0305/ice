@@ -82,7 +82,7 @@ class ControllerDriver(Driver):
         Ice.loadSlice(os.path.join(toplevel, "scripts", "Controller.ice"))
         import Test
 
-        class TestCaseI(getServantClass("Test.Common", "TestCase")):
+        class TestCaseI(Test.Common.TestCase):
             def __init__(self, driver, current):
                 self.driver = driver
                 self.current = current
@@ -130,7 +130,7 @@ class ControllerDriver(Driver):
                             self.current.config.parsedOptions.append(a)
                         setattr(self.current.config, a, v)
 
-        class ControllerI(getServantClass("Test.Common", "Controller")):
+        class ControllerI(Test.Common.Controller):
             def __init__(self, driver):
                 self.driver = driver
                 self.testcase = None

@@ -31,7 +31,7 @@ class CallbackI : public Callback
 public:
 
     virtual void
-    initiateCallback(const CallbackReceiverPrx& proxy, const Ice::Current& current)
+    initiateCallback(ICE_IN(CallbackReceiverPrxPtr) proxy, const Ice::Current& current)
     {
         proxy->callback(current.ctx);
     }
@@ -53,7 +53,7 @@ Server::run(int, char**)
 
     communicator()->getProperties()->setProperty("CallbackAdapter.Endpoints", getTestEndpoint(communicator(), 0));
     Ice::ObjectAdapterPtr adapter = communicator()->createObjectAdapter("CallbackAdapter");
-    adapter->add(new CallbackI(), Ice::stringToIdentity("callback"));
+    adapter->add(ICE_MAKE_SHARED(CallbackI), Ice::stringToIdentity("callback"));
     adapter->activate();
     communicator()->waitForShutdown();
 
@@ -63,10 +63,6 @@ Server::run(int, char**)
 int
 main(int argc, char* argv[])
 {
-#ifdef ICE_STATIC_LIBS
-    Ice::registerIceSSL();
-#endif
-
     Server app;
     Ice::InitializationData initData = getTestInitData(argc, argv);
     return app.main(argc, argv, initData);

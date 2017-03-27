@@ -20,7 +20,7 @@
         }
     };
 
-    class InitialI extends Test._InitialDisp
+    class InitialI extends Test.Initial
     {
         shutdown(current)
         {
@@ -329,6 +329,11 @@
         }
 
         supportsJavaSerializable(current)
+        {
+            return false;
+        }
+
+        supportsCppStringView(current)
         {
             return false;
         }

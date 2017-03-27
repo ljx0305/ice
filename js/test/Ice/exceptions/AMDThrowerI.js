@@ -11,7 +11,6 @@
 {
     var Ice = require("ice").Ice;
     var Test = require("Test").Test;
-    var Class = Ice.Class;
 
     var test = function(b)
     {
@@ -21,7 +20,7 @@
         }
     };
 
-    class AMDThrowerI extends Test._ThrowerDisp
+    class AMDThrowerI extends Test.Thrower
     {
         shutdown(current)
         {

@@ -17,6 +17,23 @@ These are the changes since Ice 3.6.3.
 
 ## General Changes
 
+- Added support for a new Ice.ClassGraphDepthMax property to prevent stack
+  overflows in case a sender sends a very large graph.
+
+  The unmarshaling or destruction of a graph of Slice class instances is a
+  recursive operation. This property limits the amount of stack size required to
+  perform these operations. This property is supported with all the language
+  mappings except Java and JavaScript where it's not needed (the runtime
+  environment allows graceful handling or stack overflows).
+
+  The default maximum class graph depth is 100. If you increase this value, you
+  must ensure the thread pool stack size is large enough to allow reading graphs
+  without causing a stack overflow.
+
+- Added support for IceStorm subscriber `locatorCacheTimeout` and
+  `connectionCached` QoS settings. These settings match the proxy settings and
+  allow configuring per-request load balancing on the subscriber proxy.
+
 - Implementations of the `Ice::Router` interface can now indicate whether or not
   they support a routing table through the optional out parameter `hasRoutingTable`
   of the `getClientProxy` operation. The Ice runtime won't call the `addProxies`
@@ -161,6 +178,11 @@ These are the changes since Ice 3.6.3.
 - Updated IceSSL hostname verification (enabled with IceSSL.CheckCertName) to
   use the native checks of the platform SSL implementation.
 
+- Remove IceSSL::NativeConnectionInfo, IceSSL::ConnectionInfo certs data member
+  is now mapped to the native certificate type in C++, Java and CSharp in other
+  languages it is still mapped to a string sequence containing the PEM encoded
+  certificates.
+
 ## C++ Changes
 
 - The Ice::Communicator and Ice::ObjectAdapter destroy methods are now
@@ -194,7 +216,36 @@ These are the changes since Ice 3.6.3.
 - Upgrade IceSSL Certificate API to allow retrive X509v3 extensions. This feature
   is currently only supported with OpenSSL and SChannel SSL engines.
 
+- Refactored IceSSL Plug-in API to allow loading multiple implementations of the plug-in
+  in the same proccess. Each communicator can load a single implementation, but separate
+  communicators in the same process can load different implementations.
+
+- Added support to build IceSSL plug-in using OpenSSL implementation in Windows.
+  The plug-in is built in a separate library icesslopenssl, an application can
+  load the plugin using the `IceSSLOpenSSL:createIceSSLOpenSSL' entry point. This
+  is currently only supported with Visual Studio 2015.
+
 ## C# Changes
+
+- The `batchRequestInterceptor` data member of `Ice.InitializationData` is now
+  defined as a `System.Action<Ice.BatchRequest, int, int>` delegate. You will 
+  need to update your code accordingly if you were using the now removed 
+  `Ice.BatchRequestInterceptor` interface.
+
+- The `Ice.PropertiesUpdateCallback` interface is deprecated, use the
+  `System.Action<Dictionary<string, string>>` delegate instead to receive
+  property updates.
+
+- The `threadHook` member of `InitializationData` is now deprecated. We have
+  added `threadStart` and `threadStop` members for consistency with the C++11
+  and Java mappings. A program should set these members to a System.Action
+  delegate.
+
+- The `Ice.ClassResolver` delegate has been replaced with the
+  `System.Func<string, Type>` delegate. The `Ice.CompactIdResolver` delegate
+  has been replaced with the `System.Func<int, string>` delegate. The
+  `Ice.Dispatcher` delegate has been replaced with the
+  `System.Action<System.Action, Ice.Connection>` delegate.
 
 - Added new interface/class metadata cs:tie. Use this metadata to generate a tie
   class for a given interface or class.
@@ -252,21 +303,37 @@ These are the changes since Ice 3.6.3.
       MFruitOrange
   } MFruit;
   ```
+
 ## Python Changes
 
-- The Ice communicator now implements context manager protocol. This enables
-  the code to initialize the communicator within a `with` block. The
-  communicator will implicitly be destroyed when the `with` block exits.
+- Added support for the Dispatcher facility. The `dispatcher` member of
+  `InitializationData` can be set to a callable that Ice invokes when it
+  needs to dispatch a servant invocation or an AMI callback. This facility
+  is useful for example in UI applications where it's convenient to
+  schedule Ice activity for execution on the main UI thread.
 
-- Added a new AMI mapping that returns Ice.Future. The Future class provides an API
-  that is compatible with concurrent.futures.Future, with some additional Ice-specific
+- The `threadHook` member of `InitializationData` is now deprecated. We have
+  added `threadStart` and `threadStop` members for consistency with the C++11
+  and Java mappings. A program should set these members to a callable, such as
+  a lambda function.
+
+- The `batchRequestInterceptor` member of `InitializationData` can now be set
+  to a callable. For backward compatibility, a program can also continue to supply
+  an instance of the deprecated class `Ice.BatchRequestInterceptor`.
+
+- The Ice communicator now implements the context manager protocol. This enables
+  the code to initialize the communicator within a `with` block. The communicator
+  will implicitly be destroyed when the `with` block exits.
+
+- Added a new AMI mapping that returns `Ice.Future`. The Future class provides an API
+  that is compatible with `concurrent.futures.Future`, with some additional Ice-specific
   methods. Programs can use the new mapping by adding the suffix `Async` to operation
   names, such as `sayHelloAsync`. The existing `begin_/end_` mapping is still supported.
 
 - Changed the AMD mapping. AMD servant methods must no longer append the `_async` suffix to
   their names. Additionally, an AMD callback is no longer passed to a servant method.
   Now a servant method always uses the mapped name, and it can either return the results
-  (for a synchronous implementation) or return an Ice.Future (for an asynchronous
+  (for a synchronous implementation) or return an `Ice.Future` (for an asynchronous
   implementation).
 
   With Python 3, a servant method can also be implemented as a coroutine. Ice will start
@@ -277,3 +344,9 @@ These are the changes since Ice 3.6.3.
 
 - Renamed optional invocation context parameter to `context` for consistency with other
   language mappings (was `_ctx` in previous versions).
+
+## PHP Changes
+
+- The optional not set value for the PHP namespace mapping is Ice\None preivously Ice_Unset
+  was used but unset is a PHP keyword and Ice\Unset cannot be used.
+

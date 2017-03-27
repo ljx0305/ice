@@ -96,18 +96,18 @@ include	$(top_srcdir)/config/Make.tests.rules
 
 ifneq ($(ICE_BIN_DIST),)
 prefix 			:= $(or $(ICE_HOME),$(if $(filter Darwin,$(os)),/usr/local,/usr))
-bindir			?= $(install_bindir)
-libdir			?= $(install_libdir)
-slicedir 		?= $(install_slicedir)
-includedir		?= $(install_includedir)
+bindir			= $(install_bindir)
+libdir			= $(install_libdir)
+slicedir 		= $(install_slicedir)
+includedir		= $(install_includedir)
 else
-bindir			?= $(call mappingdir,$(or $1,$(currentdir)),bin)
-libdir			?= $(call mappingdir,$(or $1,$(currentdir)),lib)
-slicedir		?= $(top_srcdir)/slice
-includedir		?= $(call mappingdir,$(or $1,$(currentdir)),include)
+bindir			= $(call mappingdir,$(or $1,$(currentdir)),bin)
+libdir			= $(call mappingdir,$(or $1,$(currentdir)),lib)
+slicedir		= $(top_srcdir)/slice
+includedir		= $(call mappingdir,$(or $1,$(currentdir)),include)
 endif
 
-srcdir 			?= $(call mappingdir,$(or $1,$(currentdir)),src)
+srcdir 			= $(call mappingdir,$(or $1,$(currentdir)),src)
 
 usr_dir_install		:= $(or $(filter yes,$(USR_DIR_INSTALL)),$(filter /usr%,$(prefix)))
 install_bindir	  	?= $(prefix)/bin
@@ -118,9 +118,9 @@ install_docdir 		?= $(prefix)$(if $(usr_dir_install),/share/ice)
 install_mandir		?= $(prefix)$(if $(usr_dir_install),/share)/man
 install_configdir 	?= $(prefix)$(if $(usr_dir_install),/share/ice,/config)
 
-version     		= 3.7a4
+version     		= 3.7b0
 mmversion		= 3.7
-soversion   		= 37a4
+soversion   		= 37b0
 
 #
 # The compatversion is the lowest patch release with the same API.

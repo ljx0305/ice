@@ -12,8 +12,6 @@
     var Ice = require("ice").Ice;
     var Test = require("Test").Test;
 
-    var Class = Ice.Class;
-
     var test = function(b)
     {
         if(!b)
@@ -22,7 +20,7 @@
         }
     };
 
-    class ThrowerI extends Test._ThrowerDisp
+    class ThrowerI extends Test.Thrower
     {
         shutdown(current)
         {
